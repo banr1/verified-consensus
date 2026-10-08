@@ -14,7 +14,7 @@ Purpose: execution — the parameters and structural conditions of a run, includ
 Paper: `sec:goldfish-schedule`, `sec:sg-schedule`, `sec:healing-schedule`,
 and `sec:complete-store`.
 
-Defines: RootInjectiveOnAncestors, Setup, and PublicTime.
+Defines: RootInjectiveBelow, RootInjectiveOnAncestors, and Setup.
 
 Read after: `DecoupledConsensusModel.Objects.Blocks`, `DecoupledConsensusModel.Objects.Parameters`, `DecoupledConsensusModel.Protocol.Schedule`
 Read next: `DecoupledConsensusModel.Execution.Node`.
@@ -69,7 +69,7 @@ section
 parameter structures, and the per-validator node identity — so that no statement
 below has to thread five arguments.
 
-`PublicTime` is the tick schedule. The four per-slot instants in
+`Statements.Generic.PublicTime` (not defined in this file) is the tick schedule. The four per-slot instants in
 `sec:goldfish-schedule` are `t_s + kΔ` for `k ∈ {0,1,2,3}` and `t_s = 4Δs`, so the
 public times are exactly the natural multiples of `Δ`. Stating the schedule this
 way records the public observation times used by the store and handler rules.

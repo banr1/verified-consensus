@@ -365,12 +365,14 @@ state, a block, and the fixed parameters — nothing else. §5 owns the store ma
 
 The transition runs per block; an empty slot triggers no height event. `T_h`
 is always a block set by `advance_height`. Progress requires the exact pair
-`(h, T_h)` or `(h, ⊥)`. `process_height_events` updates `(J, h_j)` and clears
+`(h, T_h)` or `(h, ⊥)` in the erased form; the named path binds a timeout to
+its entry first (`targetedHeightPair`). `process_height_events` updates `(J, h_j)` and clears
 the finality set. The transition has no failure result.
 
-The document gives `B.attestations` no validity conditions at all — no round
-constraint, no duplicate rule, no length bound — and this fold applies
-every element as written.
+The transition gives `B.attestations` no validity conditions — no duplicate
+rule, no length bound — and this fold applies every element as written. The
+one round constraint (no attestation from a round after the block's own) is a
+guard of `on_block`, before this fold.
 -/
 
 namespace DecoupledConsensusModel

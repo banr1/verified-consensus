@@ -116,7 +116,7 @@ def raw_goldfish_score (T : Finset (Block V))
 /-- The active source-exact Goldfish score.
 
 An equivocator counts for every block and stays among the participants, so it
-can neither create nor block a descent. A non-equivocating validator counts
+cannot block a descent, and it can make another block newly eligible. A non-equivocating validator counts
 once, in one subtree (PROTOCOL.md `def:goldfish-walk`,
 "counts once, in one subtree"). `E` remains only as a compatibility
 parameter. -/
@@ -607,7 +607,7 @@ block whose state height is below `Σ.h_max − 1` is eligible without a majorit
 (PROTOCOL.md `sec:fg-fork-choice`). The majority gate therefore applies exactly when the
 current block is inside the band `{h_max − 1, h_max}`, so the walk always
 reaches height `h_max − 1` (every viable block below the band has a viable
-child) and never passes through the band unsupported. `B.parent` is the total
+child) and passes through the band unsupported only through a current-slot child. `B.parent` is the total
 accessor (genesis is its own parent).
 
 `Height = ℕ`, so `h_max − 1` truncates at zero. Truncation cannot change this

@@ -281,7 +281,8 @@ tree ← get_filtered_block_tree(Σ); root ← get_fg_root(Σ)
 A ← get_sg_root(Σ, round(Σ.s))
 H ← ghost(A, tree, goldfish_score(votes, s, ·), eligible)
 Σ.live_confirmed ← H if eligible(H), else root
-if H ⋠ Σ.latest_confirmed then Σ.latest_confirmed ← H
+C ← H if eligible(H), else active_prefix(Σ, Σ.G2)
+update_user_confirmation_records(Σ, C)
 ```
 
 The window sets — `early_votes`, `late_votes`, `support_votes`,
@@ -303,11 +304,13 @@ denominator is the late participants. The walk and its tail use these rules:
   (PROTOCOL.md `sec:public-handlers`).
 * **The two confirmation values have different uses.** `Σ.live_confirmed`
   supplies voting and can retreat to the root. The user record
-  `Σ.latest_confirmed` takes the walk result, which equals the SG anchor when
-  the eligibility test fails. It retains an old descendant and accepts an
-  extension or a conflicting replacement. Its monotonicity is therefore a
+  `Σ.latest_confirmed` is offered the walk result when it is eligible, and
+  otherwise the active prefix of G2, or nothing. The SG anchor and the FG root
+  are never offered. It retains an old descendant and accepts an
+  extension or a conflicting replacement, and is then floored on
+  `Σ.latest_stable`. Its monotonicity is therefore a
   safety-regime theorem. Consensus duties do not read this field. The client
-  accessor `get_confirmed` combines it with `F`; finality updates do not write it.
+  accessor `get_confirmed` floors it on `get_stable`; finality updates do not write it.
 
 Rationale — safety ranked over totality: confirmation is genuine or absent,
 which decouples confirmation safety from healing at the cost that a

@@ -60,7 +60,7 @@ structure HealConfig where
   `12Δ` long. The selected schedule uses `R ≥ 3`. -/
   R_ge_three : 3 ≤ R
   /-- §3.3 `η_SG ≥ 1`: the expiry window of the relative rule
-  (PROTOCOL.md `def:majority-fork-choice`). Grades ignore it. -/
+  (PROTOCOL.md `def:majority-fork-choice`). Grades read it through `latest_window`. -/
   η_SG : Round
   /-- §3.3 `η_SG ≥ 1` (PROTOCOL.md `def:majority-fork-choice`). -/
   η_SG_ge_one : 1 ≤ η_SG

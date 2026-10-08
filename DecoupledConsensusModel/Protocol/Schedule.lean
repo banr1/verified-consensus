@@ -153,8 +153,8 @@ end Schedule
 /-- The wire constraint checked by the selected named receipt on a block's
 carried raw set: `B.votes` holds slot-`(B.slot − 1)` votes. Written
 `vote.slot + 1 = B.slot` to avoid truncated subtraction, which also makes a
-slot-`0` block carrying any vote fail it. The named ingress applies this check
-before block admission. -/
+slot-`0` block carrying any vote fail it. The handlers do not run this
+check; `DeliveryWellFormed.wire` assumes it of every delivered block. -/
 def carried_votes_well_formed {V : Type} (B : Block V) : Bool :=
   B.gf_votes.all (fun vote => decide (vote.slot + 1 = B.slot))
 
