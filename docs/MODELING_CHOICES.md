@@ -31,7 +31,8 @@ to confirm. A path with no library prefix is under `DecoupledConsensusModel/`.
   the chain by the read-only projection `Protocol.Store.toHealing`.
 - **Why** — the chain carries bare SG votes, the flat store carries combined
   attestations, and a Lean `extends` cannot retype a field.
-- **Check** — read `toHealing` field by field. It copies every field, changes
+- **Check** — read `toHealing` field by field. It copies every field of the earlier
+  layers (`latest_stable` has no field there), changes
   only the SG pool through `Protocol.sgVote`, and leaves every write to `Store`.
 
 ### 1.2 Typed timestamp maps, and grades out of the store — representation
@@ -63,7 +64,9 @@ to confirm. A path with no library prefix is under `DecoupledConsensusModel/`.
   (`Protocol/ForkChoice/Goldfish.lean`) applies no further filter.
 - **Why** — `PROTOCOL.md#propose_block` copies pooled attestations into a block,
   and `Finset.toList` is noncomputable in Mathlib, so a set pool could not be
-  copied. The model tests committee membership once, at the gate.
+  copied. The model tests committee membership once, at the gate. The gate
+  covers the pool only: a vote that a block carries is read from the block, and
+  the delivery premise of section 6 ("Well-formed carried votes") covers it.
 - **Check** — every set read goes through `pool` or `sg_pool`, and
   `PROTOCOL.md#on_goldfish_vote` and `PROTOCOL.md#on_sg_vote` reject a duplicate
   before they append, which keeps each reachable list duplicate-free.
@@ -84,8 +87,8 @@ to confirm. A path with no library prefix is under `DecoupledConsensusModel/`.
 
 ### 1.5 The split anti-slashing record — representation
 
-- **Paper** — section 1.2 gives the validator record as four maps: target,
-  timeout, lock, and the timeout history.
+- **Paper** — section 1.2 gives the validator record as three maps (target,
+  timeout, lock) and one set, the timeout history.
 - **Lean** — `Protocol.Record` holds `target`, `timeout` and `lock`;
   `Protocol.NamedRecord` holds it as `legacy` and adds `timeoutHistory`
   (`Protocol/ValidatorClient.lean`).
@@ -256,6 +259,8 @@ to confirm. A path with no library prefix is under `DecoupledConsensusModel/`.
   `[a_r, a_{r+1})`, and clamps every time below `a_0` to round 0.
 - **Check** — confirm the clamp. A round-0 sleepy window is not a premise:
   sampled windows start at rounds above 0, whose preceding action is in the run.
+  The exception is a run shorter than `a_0 = 6Δ`: the guard `t − period ≤ horizon`
+  holds at `t = period`, and the clamp then reads round 0.
 
 ### 5.3 Weights and committees stay apart — representation
 
@@ -304,6 +309,20 @@ freedom on a named scope, and `Execution.NamedRootCollisionFree`
 makes `Block.find?` act as a hash lookup. Check that the scope covers every
 block a claim compares.
 
+**Well-formed carried votes.** `PROTOCOL.md#on_block` rejects a block when one
+of its carried votes is not a previous-slot vote of a committee member, or when
+`B.support_votes` is not a subset of `B.votes`. The Lean block handler
+(`Protocol.on_block_using`, `Protocol/Handlers.lean`) has no such guard. The
+three tests are `Execution.NamedReceipt.wellFormed` (`Execution/Node.lean`), and
+`Statements.Generic.DeliveryWellFormed.wire` assumes that every delivered object
+passes it. The two forms agree on the runs the claims cover, because a rejected
+block leaves the store unchanged. On a run outside the premise they differ: the
+Lean handler admits the block, and the voter views
+(`Protocol/ForkChoice/Views.lean`) then count the carried votes with no
+committee test. Check that every claim that uses Goldfish counting carries
+`DeliveryWellFormed`. To remove the premise, move the three tests into the
+handler; this is not done.
+
 **Honest committees.** `Statements.Generic.HonestCommittees` requires a strict
 honest majority by count in every slot committee. This is a premise, not a fact
 of `Committees`. Check that the claims that need Goldfish counting name it, and
@@ -335,7 +354,7 @@ time in scope: `Statements.Generic.WindowMajority`,
 `Statements.Generic.FreshMajority`, `Statements.Generic.SingleProposerRecurrence`,
 `Statements.Generic.MultiProposerRecurrence` and
 `Statements.Generic.StrongMultiProposerRecurrence` are continuous-time contracts, and
-are therefore stronger than the round-sampled form. The recurrence tiers count
+are therefore at least as strong as the round-sampled form. The recurrence tiers count
 only the windows that end inside the run and start at or after `t₀` (tier 1)
 or GST (tiers 2 and 3).
 
@@ -375,7 +394,8 @@ A round is `4ΔR`, and the SG expiry window is `η_SG` rounds. `node_val_index`
 ties the node record to the validator that runs it: without it a validator could
 tick with another identity, and every proposer test and committee test would
 read the wrong name. `committee_nonempty` and `outage_window` stop two claims
-from becoming vacuous: an empty committee makes every committee premise false,
+from becoming vacuous, and each also removes its parameter point from every
+claim, because no `Setup` exists there (the paper allows `R = 3`, `η_SG = 1`): an empty committee makes every committee premise false,
 and at `R = 3` with `η_SG = 1` the outage window is empty.
 
 ## 9 Closed-form round times — representation

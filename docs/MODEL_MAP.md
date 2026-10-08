@@ -66,8 +66,8 @@ full `(h,T)` pair, and `NamedNodeState.record` carries it.
 │ resolution_time                  │ Protocol.resolution_time; SG rawInputs/bodyReady split               │ different shape │
 │ viable_tree_from                 │ Protocol.viable_tree with explicit blocks                            │ renamed         │
 │ viable_tree                      │ callers pass Σ.T to Protocol.viable_tree                              │ inlined         │
-│ goldfish_score                   │ Protocol.goldfish_score                                               │ none            │
-│ ghost                            │ Protocol.ghost                                                        │ none            │
+│ goldfish_score                   │ Protocol.goldfish_score                                               │ different shape │
+│ ghost                            │ Protocol.ghost                                                        │ different shape │
 │ goldfish_eligible                │ Protocol.goldfish_eligible                                            │ none            │
 │ goldfish_fork_choice             │ Protocol.goldfish_fork_choice                                         │ none            │
 │ get_fg_root                      │ Protocol.get_fg_root                                                  │ none            │
@@ -98,9 +98,9 @@ full `(h,T)` pair, and `NamedNodeState.record` carries it.
 │ height_pair                      │ Protocol.height_pair plus NamedRecord.encodeHeight                      │ different shape │
 │ create_attestation               │ Protocol.NamedRecord.create over Protocol.create_attestation            │ different shape │
 │ record_attestation               │ Protocol.record_attestation plus rememberTimeout                       │ different shape │
-│ state_transition                 │ Protocol.state_transition/transition_rows                              │ different shape │
+│ state_transition                 │ Protocol.named_transition/transition_rows                              │ different shape │
 │ process_attestation              │ process_attestation_with plus process_attestation                     │ different shape │
-│ process_height_events            │ Protocol.process_height_events                                         │ none            │
+│ process_height_events            │ Protocol.process_height_events                                         │ different shape │
 │ advance_height                   │ Protocol.advance_height                                                │ none            │
 └──────────────────────────────────┴────────────────────────────────────────────────────────────────────┴─────────────────┘
 ```
@@ -109,8 +109,14 @@ Corrections to the earlier map:
 
 - SG `equivocates` is the raw-vote head-equivocation test. It is not
   the Goldfish compatibility helper.
-- `state_transition` is active code. The named block path calls
-  `Protocol.named_transition`.
+- The active transition is `Protocol.named_transition`. `Protocol.state_transition`
+  folds erased rows, counts a timeout without its entry, and is not on the
+  runtime path.
+- `goldfish_score`, `ghost` and `process_height_events` are not literal
+  transcriptions. The score resolves roots and repeats the head-slot test, the
+  walk has fuel and a unique-best selection, and the height events factor the
+  nonjustifiable target-quorum case into the progress branch. Results agree
+  under collision-free roots.
 - `stable_root` is `frameStableRoot`, not only an inlined expression.
 - `on_goldfish_vote` includes the committee guard through its checked wrapper.
 - `resolution_time` has active Goldfish and SG receipt/body representations.
@@ -145,10 +151,10 @@ also part of the map:
 ├────────────────────────────────┼─────────────────────────────────────────────────────────────┼─────────────────┤
 │ §1 substrate/wire objects      │ Objects/*; Protocol/ChainState.lean                         │ different shape │
 │ §2 Goldfish store and merge    │ Protocol/StoreBase.lean; Protocol/Store.lean                │ different shape │
-│ §2 Goldfish score and walk     │ Protocol/ForkChoice/Goldfish.lean                          │ none            │
+│ §2 Goldfish score and walk     │ Protocol/ForkChoice/Goldfish.lean                          │ different shape │
 │ §3 SG pool/window              │ Protocol/Grades.lean; Protocol/Store.lean                  │ different shape │
 │ §4 chain state/transition      │ Protocol/ChainState.lean; Protocol/Handlers.lean            │ different shape │
-│ §4 E1/E2                       │ Protocol/Evidence.lean                                      │ none            │
+│ §4 E1/E2                       │ Protocol/ChainState.lean; set form in Evidence.lean         │ none            │
 │ §5 FG tree and client          │ Protocol/ForkChoice/Goldfish.lean; Views.lean; Head.lean   │ different shape │
 │ §6 schedule and grades         │ Protocol/Schedule.lean; Protocol/Grades.lean                 │ different shape │
 │ Generic execution              │ Execution/* plus Generic ProtocolSpec/Run                   │ not in paper    │
@@ -235,7 +241,12 @@ derive the erased SG and accountability views from it.
 **Saved grades and store field count.** The paper stores three flat fields.
 Lean stores a bounded `current` and `next` frame because next-round G2
 completes before the round rotates. Readers use only the aligned frame, and
-finality clips both frames, so behavior is unchanged. For line-by-line
+finality clips both frames. Behavior is unchanged when every public tick occurs
+once (`ScheduleWellFormed`). After a missed completion tick the two forms
+differ: a flat field keeps the value of the earlier round, and a frame reads as
+pending. Lean also returns no grade-2 block to `attest` unless all three grades
+of the round are complete (`Protocol.grade2Block`); the paper has no such gate,
+and it is always open on a complete schedule. For line-by-line
 alignment, add `Gtwo/Gone/Gzero` to the node store, overwrite `Gtwo` at its
 early completion, and keep only an internal round label/completion marker if
 proofs need it.
@@ -267,14 +278,20 @@ named `update_user_confirmation_records`, and a direct call from
 
 **Block and vote handlers.** The paper handlers are single functions. Lean
 separates validation, the core geometry update, full named payload retention,
-and carried-row admission. The selected composition preserves the guard and
-write order, including SG admission after finality. The exact edit is to expose
+and carried-row admission. The selected composition has the same guards and
+the same write order, including SG admission after finality. The guard order
+differs: Lean tests the named parent and the carried rounds first. Every guard
+returns the unchanged store, so no result differs. The carried-vote guard of
+`PROTOCOL.md#on_block` is not a handler guard in Lean; it is the premise
+`DeliveryWellFormed.wire` (MODELING_CHOICES.md, section 6). The exact edit is to expose
 one public handler per paper name and make the current `*_checked`, `*_using`,
 `process_block_core`, and `admit_carried` declarations private local steps.
 
 **Finality clipping.** The paper clips G2/G1/G0 inside `update_finality`. Lean
-updates `F` in the core store and clips the node cache immediately after the
-handler or tick. No duty can observe the un-clipped cache. The exact edit is to
+updates `F` in the core store and clips the node cache after each handler and
+each tick. Inside a tick the cache is not clipped between duties; every reader
+goes through `Protocol.readFrame`, which clips against the current `F`, so no
+duty observes an un-clipped grade. The exact edit is to
 move `clipCache` into the public finality-update result over the unified node
 store and name the recursive helper `clip`.
 
@@ -296,7 +313,8 @@ unchanged. Rename these declarations to the paper names and hide `Token`,
 
 **Grades and update_grades.** The paper evaluates a set expression and saves a
 block. Lean uses `gradeBool`, `freezeRoot`, and phase/cache completion helpers.
-Exact-domain-time and once-only checks match the paper. Rename `gradeBool` to
+The exact-domain-time check matches the paper. The once-only check has no
+paper line; it agrees because a schedule has one tick per time. Rename `gradeBool` to
 `relative_majority`, add the one-line `grade`, rename `freezeRoot` to
 `graded_block`, and expose one `update_grades` wrapper.
 

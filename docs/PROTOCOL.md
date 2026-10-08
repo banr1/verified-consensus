@@ -5,21 +5,21 @@
 Measured SHA-256 of the source file (`shasum -a 256`):
 
 ```text
-dc471b47a46896fe0a3df300c188fef1512f475615ce0fc0df18dbea6d2e5517
+efd2a7eb0ad7b836bdb7726aa31aa9644f45230776d79d2a59521de822bb26df
 ```
 
 ```text
 ┌──────────────────┬───────────────────────────────────────────────────────────────────┐
 │ Source file      │ consensus.tex                                                     │
-│ File length      │ 2 457 lines                                                       │
-│ Section 7 range  │ lines 1459–2281 (§7 "Complete protocol")                          │
-│ Assumptions      │ lines 2394–2457 (§9 "Participation and accountability")           │
-│ Appendix sources │ §1 (85–114), §2 (115–333), §3 (484–608), §4 (685–848),            │
-│                  │ §5 (850–1042), §6 (1158–1345, 1452–1458)                          │
+│ File length      │ 2 579 lines                                                       │
+│ Section 7 range  │ lines 1475–2308 (§7 "Complete protocol")                          │
+│ Assumptions      │ lines 2516–2579 (§9 "Participation and accountability")           │
+│ Appendix sources │ §1 (85–114), §2 (115–334), §3 (493–617), §4 (694–857),            │
+│                  │ §5 (859–1058), §6 (1174–1361, 1468–1474)                          │
 └──────────────────┴───────────────────────────────────────────────────────────────────┘
 ```
 
-Source: `consensus.tex` at commit `9f5ed717ffac` (not yet public).
+Source: `consensus.tex` at commit `2f4b9d1c5e1a` (not yet public).
 This file is a faithful extraction. The pseudocode is reproduced verbatim in
 structure: the paper's function names, argument names, statement order and
 comments are kept, and no line of an algorithm is omitted. LaTeX macros are
@@ -436,6 +436,10 @@ Algorithm block: `alg:store`.
 function on_block(Σ, B)                          ▷ §5 (sec:fg-fork-choice), extended at this layer
     if B.slot > Σ.s or B ∈ Σ.𝒯 or B.parent ∉ Σ.𝒯 then
         return
+    if some vote ∈ B.votes has vote.slot + 1 ≠ B.slot or vote.val_index ∉ 𝒦_{vote.slot},
+       or B.support_votes ⊄ B.votes then
+        return
+                                                 ▷ carried votes are valid previous-slot votes
     if Σ.F ⋠ B then
         return
     if some a ∈ B.attestations has a.round > round(B.slot) then
@@ -514,6 +518,9 @@ function resolution_time(Σ, x)                   ▷ §2.2 (sec:goldfish-store)
         return Σ.timestamp(x)
     if C ∉ Σ.𝒯 then
         return +∞
+    if x is a Goldfish vote and C.slot > x.slot then
+        return +∞
+                                                 ▷ a later-slot head never resolves
     return max{ Σ.timestamp(x), Σ.timestamp(C) }
 ```
 
@@ -871,7 +878,8 @@ function goldfish_vote(Σ)                        ▷ §2 (sec:goldfish), unchan
     for all B ∈ Σ.𝒯 with B.slot = s do
         included_votes ← { vote ∈ B.votes : vote.slot = s − 1 }
         votes ← votes ∪ included_votes
-        support_votes ← support_votes ∪ { (v, s − 1, H) ∈ B.support_votes : H ∈ Σ.𝒯 }
+        support_votes ← support_votes ∪ { (v, s − 1, H) ∈ B.support_votes : H ∈ Σ.𝒯
+                                                                    and H.slot ≤ s − 1 }
     tree ← voter_filtered_block_tree(Σ, s)
     H ← get_head_in_tree(Σ, tree, votes, support_votes, s − 1)
     if val_index ∈ 𝒦_s then
@@ -1231,8 +1239,8 @@ its head. For a vote with head H, the *resolution time* is the derived
 function
 
 ```text
-Σ.resolution_time(vote) = max{ Σ.timestamp(vote), Σ.timestamp(H) },  H ∈ Σ.𝒯,
-                        = +∞,                                        H ∉ Σ.𝒯.
+Σ.resolution_time(vote) = max{ Σ.timestamp(vote), Σ.timestamp(H) },  H ∈ Σ.𝒯 and H.slot ≤ vote.slot,
+                        = +∞,                                        otherwise.
 ```
 
 An honest node forwards every block it admits and every accepted Goldfish vote
@@ -1250,7 +1258,8 @@ The set *votes* contains each slot-(s − 1) vote that the store received before
 t_{s−1} + 3Δ, together with every slot-(s − 1) vote included in an admitted
 slot-s proposal. The subset *support_votes* contains local votes resolved
 before the freeze time t_{s−1} + 3Δ, together with each vote in the proposal's
-B.support_votes whose head is in Σ.𝒯 by voting time. This proposal arm does not
+B.support_votes whose head is in Σ.𝒯 by voting time and is a block of slot at
+most s − 1. This proposal arm does not
 require the vote to have entered Σ.gf_votes or to have a local receipt
 timestamp. For a proposal B, a vote in B.votes \ B.support_votes remains
 outside *support_votes* even if it resolves before the voter runs.
